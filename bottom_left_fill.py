@@ -49,7 +49,7 @@ class BottomLeftFill(object):
             raise ValueError("Первый полигон не помещается в контейнер")
             
         for i in range(1, len(self.polygons)):
-            print(f"##### Place the {i + 1}th shape #####")
+            # print(f"##### Place the {i + 1}th shape #####")
             if not self.placePoly(i):
                 # Пробуем повернуть фигуру, если она не помещается
                 if not self.tryRotateAndPlace(i):
