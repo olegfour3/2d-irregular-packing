@@ -1,0 +1,17 @@
+# Histoy
+# history/
+
+# VS code
+.vscode/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environments
+.env
+venv/

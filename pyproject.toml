@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "poetry init"
+version = "0.1.0"
+description = ""
+authors = ["Oleg Pashuk <olegfour3@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+matplotlib = "^3.9.3"
+numpy = "^2.2.0"
+pandas = "^2.2.3"
+shapely = "^2.0.6"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
