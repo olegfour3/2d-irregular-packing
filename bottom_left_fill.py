@@ -60,7 +60,7 @@ class BottomLeftFill(object):
         self.getLength()
 
     def sort_polygons(self):
-        """Сортировка полигонов по размеру и сложности"""
+        """Сортировка полигонов по размеру ограничивающего прямоугольника"""
         # Вычисляем метрики для каждого полигона
         poly_metrics = []
         for i, poly in enumerate(self.polygons):
@@ -73,7 +73,7 @@ class BottomLeftFill(object):
             space_efficiency = actual_area / bbox_area if bbox_area > 0 else 0
             
             # Комбинированная метрика
-            score = (actual_area * 0.5 +  # Учитываем площадь
+            score = (bbox_area * 0.5 +  # Учитываем площадь bbox
                     (1 - space_efficiency) * 0.3 +  # Учитываем эффективность использования
                     complexity * 0.2)  # Учитываем сложность формы
                 
@@ -282,7 +282,7 @@ class BottomLeftFill(object):
         return _max
 
     def calculate_placement_score(self, poly, placed_polys):
-        """Вычисление оценки размещения полигона"""
+        """Вычисление оценки размещения полигона по формуле из статьи"""
         if not placed_polys:
             return 0
         
@@ -299,6 +299,10 @@ class BottomLeftFill(object):
         
         # Вычисляем оценку по формуле из статьи
         score = new_bbox.area + self.calculate_bbox([new_shape]).area
+        
+        # Добавляем компонент для минимизации x + y
+        x, y = new_shape.centroid.coords[0]
+        score += (x + y) * 0.01
         
         return score
 

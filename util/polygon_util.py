@@ -315,3 +315,26 @@ def slide_poly(poly, x, y):
 
 def slide_to_point(poly, pt1, pt2):
     slide_poly(poly, pt2[0] - pt1[0], pt2[1] - pt1[1])
+
+
+def rotate_polygon(polygon, angle):
+    """Поворот полигона на заданный угол"""
+    # Находим центр полигона
+    poly = Polygon(polygon)
+    centroid = poly.centroid
+    
+    # Переносим в начало координат
+    translated = [[p[0] - centroid.x, p[1] - centroid.y] for p in polygon]
+    
+    # Поворачиваем
+    angle_rad = np.radians(angle)
+    cos_a = np.cos(angle_rad)
+    sin_a = np.sin(angle_rad)
+    
+    rotated = []
+    for p in translated:
+        x = p[0] * cos_a - p[1] * sin_a
+        y = p[0] * sin_a + p[1] * cos_a
+        rotated.append([x + centroid.x, y + centroid.y])
+        
+    return rotated
