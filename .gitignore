@@ -15,3 +15,5 @@ __pycache__/
 # Environments
 .env
 venv/
+
+history/

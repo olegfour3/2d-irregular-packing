@@ -64,13 +64,24 @@ def test_packing_algorithm():
         
         [[0,0], [3,0], [3,3], [2,3], [2,1], [0,1]],
         
-        [[0,0], [4,0], [4,1], [3,1], [3,2], [1,2], [1,1], [0,1]]
+        [[0,0], [4,0], [4,1], [3,1], [3,2], [1,2], [1,1], [0,1]],
+        
+        [[0,0], [4,0], [4,2], [0,2]],
+        
+        [[0,0], [3,0], [3,1], [0,1]],
+        
+        # Треугольники
+        [[0,0], [2,0], [1,2]],
+        
+        [[0,0], [2,0], [2,3], [0,3]],
+        
+        [[0,0], [3,0], [1.5,2.5]]
     ]
     
     # Создаем тестовый набор с повторениями
     test_data = {
         'polygon': [json.dumps(p) for p in test_polygons],
-        'num': [3, 4, 3, 5, 3, 2, 2, 2, 2]  # Количество повторений каждой фигуры
+        'num': [3, 4, 3, 5, 3, 2, 2, 2, 2, 3, 4, 3, 5, 3]  # Количество повторений каждой фигуры
     }
     df = pd.DataFrame(test_data)
     
@@ -99,34 +110,39 @@ def test_packing_algorithm():
     )
     
     # Параметры контейнера
-    container_width = 20
+    container_width = 50
+    container_height = 20  # Фиксированная высота
     
     print("Выполнение упаковки...")
-    bfl = BottomLeftFill(
-        width=container_width,
-        original_polygons=scaled_polygons,
-        nfp_assistant=nfp_assistant
-    )
-    
-    end_time = time.time()
-    execution_time = end_time - start_time
-    
-    # Расчет эффективности
-    efficiency = calculate_container_efficiency(
-        bfl.polygons, 
-        container_width, 
-        bfl.contain_length
-    )
-    
-    # Вывод результатов
-    print("\nРезультаты тестирования:")
-    print(f"Время выполнения: {execution_time:.2f} секунд")
-    print(f"Длина контейнера: {bfl.contain_length:.2f}")
-    print(f"Эффективность использования пространства: {efficiency:.2f}%")
-    
-    # Визуализация только финального результата
-    print("\nВизуализация результата упаковки...")
-    visualize_packing_result(bfl.polygons, container_width, bfl.contain_length)
+    try:
+        bfl = BottomLeftFill(
+            width=container_width,
+            height=container_height,
+            original_polygons=scaled_polygons,
+            nfp_assistant=nfp_assistant
+        )
+        
+        end_time = time.time()
+        execution_time = end_time - start_time
+        
+        # Расчет эффективности
+        efficiency = calculate_container_efficiency(
+            bfl.polygons, 
+            container_width, 
+            container_height  # Используем фиксированную высоту
+        )
+        
+        # Вывод результатов
+        print("\nРезультаты тестирования:")
+        print(f"Время выполнения: {execution_time:.2f} секунд")
+        print(f"Эффективность использования пространства: {efficiency:.2f}%")
+        
+        # Визуализация
+        visualize_packing_result(bfl.polygons, container_width, container_height)
+        
+    except ValueError as e:
+        print(f"\nОшибка упаковки: {str(e)}")
+        print("Попробуйте увеличить размеры контейнера или уменьшить количество фигур")
 
 if __name__ == '__main__':
     test_packing_algorithm() 

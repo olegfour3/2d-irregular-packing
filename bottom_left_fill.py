@@ -27,52 +27,112 @@ warnings.showwarning = warning_to_exception
 
 
 class BottomLeftFill(object):
-    def __init__(self, width, original_polygons, nfp_assistant, **kw):
+    def __init__(self, width, height, original_polygons, nfp_assistant, **kw):
         self.choose_nfp = False
         self.width = width
-        self.length = 150000  # 代表长度
-        self.contain_length = 2000
+        self.height = height
+        self.length = self.height
+        self.contain_length = self.height
         self.polygons = original_polygons
         self.nfp_assistant = nfp_assistant
+        self.container = Polygon([[0,0], [self.width,0], 
+                                [self.width,self.height], 
+                                [0,self.height]])
 
         print("Total Num:", len(original_polygons))
-        self.placeFirstPoly()
+        if not self.placeFirstPoly():
+            raise ValueError("Первый полигон не помещается в контейнер")
+            
         for i in range(1, len(self.polygons)):
             print(f"##### Place the {i + 1}th shape #####")
-            self.placePoly(i)
+            if not self.placePoly(i):
+                raise ValueError(f"Не удалось разместить полигон {i+1}")
         self.getLength()
 
+    def check_placement(self, poly):
+        """Проверка корректности размещения полигона"""
+        poly_shape = Polygon(poly)
+        
+        # Проверка границ контейнера с допуском
+        TOLERANCE = 1e-10
+        bounds = poly_shape.bounds  # (minx, miny, maxx, maxy)
+        
+        if (bounds[0] < -TOLERANCE or 
+            bounds[1] < -TOLERANCE or 
+            bounds[2] > self.width + TOLERANCE or 
+            bounds[3] > self.height + TOLERANCE):
+            return False
+            
+        # Проверка пересечений с другими полигонами
+        for other_poly in self.polygons:
+            if other_poly != poly:  # Не проверяем с самим собой
+                other_shape = Polygon(other_poly)
+                if poly_shape.intersects(other_shape):
+                    intersection = poly_shape.intersection(other_shape)
+                    if intersection.area > 1e-10:  # Допуск на численные погрешности
+                        return False
+        return True
+
+    def find_valid_position(self, poly, start_x=0, start_y=0):
+        """Поиск валидной позиции для полигона"""
+        left_index, bottom_index, right_index, top_index = check_bound(poly)
+        poly_width = poly[right_index][0] - poly[left_index][0]
+        poly_height = poly[top_index][1] - poly[bottom_index][1]
+        
+        # Пробуем различные позиции
+        for y in range(int(start_y), int(self.height - poly_height) + 1):
+            for x in range(int(start_x), int(self.width - poly_width) + 1):
+                test_poly = poly.copy()
+                slide_poly(test_poly, x - poly[left_index][0], y - poly[bottom_index][1])
+                if self.check_placement(test_poly):
+                    slide_poly(poly, x - poly[left_index][0], y - poly[bottom_index][1])
+                    return True
+        return False
+
     def placeFirstPoly(self):
-        poly = self.polygons[0]
-        left_index, bottom_index, _, _ = check_bound(poly)  # 获得边界
-        slide_poly(poly, -poly[left_index][0], -poly[bottom_index][1])  # 平移到左下角
+        """Размещение первого полигона с поиском позиции"""
+        return self.find_valid_position(self.polygons[0])
 
     def placePoly(self, index):
+        """Размещение полигона с проверками"""
         adjoin = self.polygons[index]
         ifr = get_inner_fit_rectangle(self.polygons[index], self.length, self.width)
         differ_region = Polygon(ifr)
 
+        # Собираем все NFP
+        nfp_regions = []
         for main_index in range(0, index):
             main = self.polygons[main_index]
-            nfp = self.nfp_assistant.getDirectNFP(main, adjoin)
-            nfp_poly = Polygon(nfp)
             try:
+                nfp = self.nfp_assistant.getDirectNFP(main, adjoin)
+                nfp_poly = Polygon(nfp)
+                nfp_regions.append(nfp_poly)
                 differ_region = differ_region.difference(nfp_poly)
-            except:
-                print("NFP failure, areas of polygons are:")
-                self.showAll()
-                for poly in main, adjoin:
-                    print(Polygon(poly).area)
-                # self.showPolys([main] + [adjoin] + [nfp])
-                print("NFP loaded from: ", self.nfp_assistant.history_path)
+            except Exception as e:
+                print(f"NFP failure for polygons {main_index} and {index}: {str(e)}")
+                return False
 
-        differ = poly_to_arr(differ_region)
-        differ_index = self.getBottomLeft(differ)
-        refer_pt_index = check_top(adjoin)
-        slide_to_point(
-            self.polygons[index], adjoin[refer_pt_index], differ[differ_index]
-        )
-        # self.showPolys(self.polygons[: index + 1])
+        if differ_region.is_empty:
+            print(f"Нет места для размещения полигона {index+1}")
+            return False
+
+        # Получаем все возможные точки размещения
+        differ_points = poly_to_arr(differ_region)
+        
+        # Сортируем точки по возрастанию x и y
+        differ_points.sort(key=lambda p: (p[0], p[1]))
+        
+        # Пробуем разные точки размещения
+        for point in differ_points:
+            refer_pt_index = check_top(adjoin)
+            test_poly = self.polygons[index].copy()
+            slide_to_point(test_poly, adjoin[refer_pt_index], point)
+            
+            if self.check_placement(test_poly):
+                slide_to_point(self.polygons[index], adjoin[refer_pt_index], point)
+                return True
+                
+        return False
 
     def getBottomLeft(self, poly):
         # 获得左底部点，优先左侧，有多个左侧选择下方
@@ -145,7 +205,7 @@ if __name__ == "__main__":
     )
     bfl = BottomLeftFill(
         width=1200,
-        length=10000,
+        height=1000,
         original_polygons=scaled_polygons,
         nfp_assistant=nfp_assistant,
     )
