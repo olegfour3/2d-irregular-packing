@@ -42,6 +42,9 @@ class BottomLeftFill(object):
 
         print("Total Num:", len(original_polygons))
         
+        # Сортировка полигонов перед упаковкой
+        self.sort_polygons()
+        
         # Проверяем, помещаются ли фигуры в контейнер по размеру
         self.validate_polygons()
         
@@ -55,6 +58,32 @@ class BottomLeftFill(object):
                 if not self.tryRotateAndPlace(i):
                     raise ValueError(f"Не удалось разместить полигон {i+1}")
         self.getLength()
+
+    def sort_polygons(self):
+        """Сортировка полигонов по размеру и сложности"""
+        # Вычисляем метрики для каждого полигона
+        poly_metrics = []
+        for i, poly in enumerate(self.polygons):
+            shape = Polygon(poly)
+            bbox_area = shape.bounds[2] * shape.bounds[3]  # Площадь ограничивающего прямоугольника
+            actual_area = shape.area  # Фактическая площадь
+            complexity = len(poly)  # Количество вершин как мера сложности
+            
+            # Вычисляем эффективность использования пространства
+            space_efficiency = actual_area / bbox_area if bbox_area > 0 else 0
+            
+            # Комбинированная метрика
+            score = (actual_area * 0.5 +  # Учитываем площадь
+                    (1 - space_efficiency) * 0.3 +  # Учитываем эффективность использования
+                    complexity * 0.2)  # Учитываем сложность формы
+                
+            poly_metrics.append((i, score))
+        
+        # Сортируем по убыванию метрики
+        poly_metrics.sort(key=lambda x: x[1], reverse=True)
+        
+        # Переупорядочиваем полигоны
+        self.polygons = [self.polygons[i] for i, _ in poly_metrics]
 
     def validate_polygons(self):
         """Проверка и масштабирование полигонов под размер контейнера"""
@@ -251,6 +280,40 @@ class BottomLeftFill(object):
         self.contain_length = _max
         # PltFunc.addLine([[0,self.contain_length],[self.width,self.contain_length]],color="blue")
         return _max
+
+    def calculate_placement_score(self, poly, placed_polys):
+        """Вычисление оценки размещения полигона"""
+        if not placed_polys:
+            return 0
+        
+        # Создаем множество размещенных полигонов
+        placed_shapes = [Polygon(p) for p in placed_polys]
+        new_shape = Polygon(poly)
+        
+        # Вычисляем bbox только размещенных фигур
+        placed_bbox = self.calculate_bbox(placed_shapes)
+        
+        # Вычисляем bbox с новой фигурой
+        all_shapes = placed_shapes + [new_shape]
+        new_bbox = self.calculate_bbox(all_shapes)
+        
+        # Вычисляем оценку по формуле из статьи
+        score = new_bbox.area + self.calculate_bbox([new_shape]).area
+        
+        return score
+
+    def calculate_bbox(self, shapes):
+        """Вычисление общего bbox для набора фигур"""
+        if not shapes:
+            return None
+        
+        minx = min(shape.bounds[0] for shape in shapes)
+        miny = min(shape.bounds[1] for shape in shapes)
+        maxx = max(shape.bounds[2] for shape in shapes)
+        maxy = max(shape.bounds[3] for shape in shapes)
+        
+        return Polygon([[minx,miny], [maxx,miny], 
+                       [maxx,maxy], [minx,maxy]])
 
 
 if __name__ == "__main__":
