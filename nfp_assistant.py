@@ -20,6 +20,10 @@ class NFPAssistant(object):
                 [poly[1][0] - poly[0][0], poly[1][1] - poly[0][1]]
             )
         self.nfp_list = [[0] * len(self.polys) for i in range(len(self.polys))]
+        
+        # Инициализация кэша NFP
+        self._nfp_cache = {}
+        
         self.load_history = False
         self.history_path = None
         self.history = None
@@ -107,23 +111,43 @@ class NFPAssistant(object):
 
     # 输入形状获得NFP
     def getDirectNFP(self, poly1, poly2, **kw):
+        # Добавляем кэширование на основе геометрических характеристик
+        cache_key = self._get_cache_key(poly1, poly2)
+        if cache_key in self._nfp_cache:
+            return self._nfp_cache[cache_key]
+        
         if "index" in kw:
             i = kw["index"][0]
             j = kw["index"][1]
             centroid = get_point(Polygon(self.polys[i]).centroid)
         else:
-            # 首先获得poly1和poly2的ID
             i = self.getPolyIndex(poly1)
             j = self.getPolyIndex(poly2)
             centroid = get_point(Polygon(poly1).centroid)
-        # 判断是否计算过并计算nfp
+
         if self.nfp_list[i][j] == 0:
-            nfp = NFP(poly1, poly2).nfp
-            # self.nfp_list[i][j]=get_slide(nfp,-centroid[0],-centroid[1])
-            if self.store_nfp == True:
+            # Добавляем проверку на симметричность NFP
+            if i != j and self.nfp_list[j][i] != 0:
+                nfp = self._get_symmetric_nfp(self.nfp_list[j][i])
+            else:
+                nfp = NFP(poly1, poly2).nfp
+            
+            self._nfp_cache[cache_key] = nfp
+            
+            if self.store_nfp:
                 with open("history/nfp.csv", "a+") as csvfile:
                     writer = csv.writer(csvfile)
                     writer.writerows([[poly1, poly2, nfp]])
             return nfp
         else:
             return get_slide(self.nfp_list[i][j], centroid[0], centroid[1])
+
+    def _get_cache_key(self, poly1, poly2):
+        """Генерация ключа кэша на основе геометрических характеристик"""
+        p1_area = Polygon(poly1).area
+        p2_area = Polygon(poly2).area
+        return f"{p1_area:.6f}_{p2_area:.6f}"
+
+    def _get_symmetric_nfp(self, nfp):
+        """Получение симметричного NFP"""
+        return [[-p[0], -p[1]] for p in nfp]

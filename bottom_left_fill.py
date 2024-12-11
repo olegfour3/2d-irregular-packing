@@ -15,6 +15,7 @@ from util.polygon_util import (
     slide_poly,
     slide_to_point,
 )
+import numpy as np
 
 
 def warning_to_exception(message, category, filename, lineno, file=None, line=None):
@@ -40,14 +41,77 @@ class BottomLeftFill(object):
                                 [0,self.height]])
 
         print("Total Num:", len(original_polygons))
+        
+        # Проверяем, помещаются ли фигуры в контейнер по размеру
+        self.validate_polygons()
+        
         if not self.placeFirstPoly():
             raise ValueError("Первый полигон не помещается в контейнер")
             
         for i in range(1, len(self.polygons)):
             print(f"##### Place the {i + 1}th shape #####")
             if not self.placePoly(i):
-                raise ValueError(f"Не удалось разместить полигон {i+1}")
+                # Пробуем повернуть фигуру, если она не помещается
+                if not self.tryRotateAndPlace(i):
+                    raise ValueError(f"Не удалось разместить полигон {i+1}")
         self.getLength()
+
+    def validate_polygons(self):
+        """Проверка и масштабирование полигонов под размер контейнера"""
+        max_poly_width = 0
+        max_poly_height = 0
+        
+        for poly in self.polygons:
+            poly_bounds = Polygon(poly).bounds
+            max_poly_width = max(max_poly_width, poly_bounds[2] - poly_bounds[0])
+            max_poly_height = max(max_poly_height, poly_bounds[3] - poly_bounds[1])
+        
+        # Если фигуры больше контейнера, масштабируем их
+        if max_poly_width > self.width or max_poly_height > self.height:
+            scale_factor = min(self.width / max_poly_width, 
+                             self.height / max_poly_height) * 0.95  # 5% запас
+            self.polygons = [scale_polygon(p, scale_factor) for p in self.polygons]
+            print(f"Полигоны масштабированы с коэффициентом {scale_factor:.3f}")
+
+    def tryRotateAndPlace(self, index):
+        """Попытка разместить полигон с разными углами поворота"""
+        original_poly = self.polygons[index].copy()
+        
+        # Пробуем разные углы поворота
+        for angle in [90, 180, 270]:
+            # Поворачиваем полигон
+            rotated_poly = self.rotate_polygon(original_poly, angle)
+            self.polygons[index] = rotated_poly
+            
+            # Пробуем разместить повернутый полигон
+            if self.placePoly(index):
+                return True
+                
+        # Если не удалось разместить, возвращаем исходный полигон
+        self.polygons[index] = original_poly
+        return False
+
+    def rotate_polygon(self, polygon, angle):
+        """Поворот полигона на заданный угол"""
+        # Находим центр полигона
+        poly = Polygon(polygon)
+        centroid = poly.centroid
+        
+        # Переносим в начало координат
+        translated = [[p[0] - centroid.x, p[1] - centroid.y] for p in polygon]
+        
+        # Поворачиваем
+        angle_rad = np.radians(angle)
+        cos_a = np.cos(angle_rad)
+        sin_a = np.sin(angle_rad)
+        
+        rotated = []
+        for p in translated:
+            x = p[0] * cos_a - p[1] * sin_a
+            y = p[0] * sin_a + p[1] * cos_a
+            rotated.append([x + centroid.x, y + centroid.y])
+            
+        return rotated
 
     def check_placement(self, poly):
         """Проверка корректности размещения полигона"""
@@ -55,7 +119,7 @@ class BottomLeftFill(object):
         
         # Проверка границ контейнера с допуском
         TOLERANCE = 1e-10
-        bounds = poly_shape.bounds  # (minx, miny, maxx, maxy)
+        bounds = poly_shape.bounds
         
         if (bounds[0] < -TOLERANCE or 
             bounds[1] < -TOLERANCE or 
@@ -65,11 +129,11 @@ class BottomLeftFill(object):
             
         # Проверка пересечений с другими полигонами
         for other_poly in self.polygons:
-            if other_poly != poly:  # Не проверяем с самим собой
+            if other_poly != poly:
                 other_shape = Polygon(other_poly)
                 if poly_shape.intersects(other_shape):
                     intersection = poly_shape.intersection(other_shape)
-                    if intersection.area > 1e-10:  # Допуск на численные погрешности
+                    if intersection.area > 1e-10:
                         return False
         return True
 

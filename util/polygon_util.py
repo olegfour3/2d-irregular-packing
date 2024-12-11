@@ -5,47 +5,38 @@ from shapely.geometry import LineString, mapping, Polygon
 
 
 def almost_contain(line, point):
-    # 会由于int导致计算偏差！！！！！！
+    """Улучшенная проверка вхождения точки в линию"""
     pt1 = [line[0][0], line[0][1]]
     pt2 = [line[1][0], line[1][1]]
     point = [point[0], point[1]]
 
-    # 水平直线情况：通过比较两个点和中间点比较
-    if abs(pt1[1] - point[1]) < BIAS and abs(pt2[1] - point[1]) < BIAS:
-        # print("水平情况")
-        if (pt1[0] - point[0]) * (pt2[0] - point[0]) < 0:
-            return True
-        else:
+    # Оптимизированная проверка для горизонтальных/вертикальных линий
+    dx = abs(pt1[0] - pt2[0])
+    dy = abs(pt1[1] - pt2[1])
+    
+    if dx < BIAS:  # Вертикальная линия
+        if abs(point[0] - pt1[0]) > BIAS:
             return False
-
-    # 排除垂直的情况
-    if abs(pt1[0] - point[0]) < BIAS and abs(pt2[0] - point[0]) < BIAS:
-        # print("垂直情况")
-        if (pt1[1] - point[1]) * (pt2[1] - point[1]) < 0:
-            return True
-        else:
+        return (point[1] - pt1[1]) * (point[1] - pt2[1]) <= 0
+        
+    if dy < BIAS:  # Горизонтальная линия 
+        if abs(point[1] - pt1[1]) > BIAS:
             return False
+        return (point[0] - pt1[0]) * (point[0] - pt2[0]) <= 0
 
-    if (
-        abs(pt1[0] - point[0]) < BIAS
-        or abs(pt2[0] - point[0]) < BIAS
-        or abs(pt1[0] - pt2[0]) < BIAS
-    ):
+    # Для наклонных линий используем улучшенный алгоритм
+    if (abs(pt1[0] - point[0]) < BIAS or 
+        abs(pt2[0] - point[0]) < BIAS or
+        abs(pt1[0] - pt2[0]) < BIAS):
         return False
 
-    # 正常情况，计算弧度的差值
-    arc1 = np.arctan((line[0][1] - line[1][1]) / (line[0][0] - line[1][0]))
-    arc2 = np.arctan((point[1] - line[1][1]) / (point[0] - line[1][0]))
-    if abs(arc1 - arc2) < BIAS:  # 原值0.03，dighe近似平行修正为0.01
-        if (point[1] - pt1[1]) * (pt2[1] - point[1]) > 0 and (point[0] - pt1[0]) * (
-            pt2[0] - point[0]
-        ) > 0:
-            # print("一般情况")
-            return True
-        else:
-            return False
-    else:
-        return False
+    arc1 = np.arctan2(line[0][1] - line[1][1], line[0][0] - line[1][0])
+    arc2 = np.arctan2(point[1] - line[1][1], point[0] - line[1][0])
+    
+    if abs(arc1 - arc2) < BIAS:
+        return ((point[1] - pt1[1]) * (pt2[1] - point[1]) > 0 and 
+                (point[0] - pt1[0]) * (pt2[0] - point[0]) > 0)
+    return False
 
 
 def almost_equal(point1, point2):
@@ -230,61 +221,59 @@ def line_to_vec(edge):
 
 # 主要用于判断是否有直线重合 过于复杂需要重构
 def new_line_inter(line1, line2):
+    """Улучшенная проверка пересечения линий"""
     vec1 = line_to_vec(line1)
     vec2 = line_to_vec(line2)
     vec12_product = cross_product(vec1, vec2)
     Line1 = LineString(line1)
     Line2 = LineString(line2)
-    inter = {"length": 0, "geom_type": None}
-    # 只有平行才会有直线重叠
-    if vec12_product == 0:
-        # copy避免影响原值
-        new_line1 = copy_poly(line1)
-        new_line2 = copy_poly(line2)
-        if vec1[0] * vec2[0] < 0 or vec1[1] * vec2[1] < 0:
-            new_line2 = reverse_line(new_line2)
-        # 如果存在顶点相等，则选择其中一个
-        if almost_equal(new_line1[0], new_line2[0]) or almost_equal(
-            new_line1[1], new_line2[1]
-        ):
-            inter["length"] = min(Line1.length, Line2.length)
-            inter["geom_type"] = "LineString"
-            return inter
-        # 排除只有顶点相交情况
-        if almost_equal(new_line1[0], new_line2[1]):
-            inter["length"] = new_line2[1]
-            inter["geom_type"] = "Point"
-            return inter
-        if almost_equal(new_line1[1], new_line2[0]):
-            inter["length"] = new_line1[1]
-            inter["geom_type"] = "Point"
-            return inter
-        # 否则判断是否包含
-        line1_contain_line2_pt0 = almost_contain(new_line1, new_line2[0])
-        line1_contain_line2_pt1 = almost_contain(new_line1, new_line2[1])
-        line2_contain_line1_pt0 = almost_contain(new_line2, new_line1[0])
-        line2_contain_line1_pt1 = almost_contain(new_line2, new_line1[1])
-        # Line1直接包含Line2
-        if line1_contain_line2_pt0 and line1_contain_line2_pt1:
-            inter["length"] = Line1.length
-            inter["geom_type"] = "LineString"
-            return inter
-        # Line2直接包含Line1
-        if line1_contain_line2_pt0 and line1_contain_line2_pt1:
-            inter["length"] = Line2.length
-            inter["geom_type"] = "LineString"
-            return inter
-        # 相互包含交点
-        if line1_contain_line2_pt0 and line2_contain_line1_pt1:
-            inter["length"] = LineString([line2[0], line1[1]]).length
-            inter["geom_type"] = "LineString"
-            return inter
-        if line1_contain_line2_pt1 and line2_contain_line1_pt0:
-            inter["length"] = LineString([line2[1], line1[0]]).length
-            inter["geom_type"] = "LineString"
-            return inter
-    return inter
+    
+    # Быстрая проверка на параллельность
+    if abs(vec12_product) < BIAS:
+        return _check_parallel_lines(line1, line2, vec1, vec2, Line1, Line2)
+        
+    # Проверка пересечения непараллельных линий
+    inter = Line1.intersection(Line2)
+    if not inter.is_empty:
+        return {"length": inter.length, "geom_type": inter.geom_type}
+    return {"length": 0, "geom_type": None}
 
+def _check_parallel_lines(line1, line2, vec1, vec2, Line1, Line2):
+    """Проверка пересечения параллельных линий"""
+    new_line1 = copy_poly(line1)
+    new_line2 = copy_poly(line2)
+    
+    # Проверяем направление векторов
+    if vec1[0] * vec2[0] < 0 or vec1[1] * vec2[1] < 0:
+        new_line2 = reverse_line(new_line2)
+        
+    # Проверяем совпадение концов
+    for p1 in new_line1:
+        for p2 in new_line2:
+            if almost_equal(p1, p2):
+                return {"length": 0, "geom_type": "Point"}
+                
+    # Проверяем наложение
+    if (_line_contains_point(new_line1, new_line2[0]) or
+        _line_contains_point(new_line1, new_line2[1]) or
+        _line_contains_point(new_line2, new_line1[0]) or
+        _line_contains_point(new_line2, new_line1[1])):
+        return {"length": min(Line1.length, Line2.length),
+                "geom_type": "LineString"}
+                
+    return {"length": 0, "geom_type": None}
+
+def _line_contains_point(line, point):
+    """Проверка, содержится ли точка в линии"""
+    # Проверяем, лежит ли точка на отрезке
+    if almost_contain(line, point):
+        return True
+        
+    # Дополнительная проверка для граничных случаев
+    if almost_equal(line[0], point) or almost_equal(line[1], point):
+        return True
+        
+    return False
 
 def poly_to_arr(inter):
     res = mapping(inter)
