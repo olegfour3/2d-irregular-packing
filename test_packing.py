@@ -111,7 +111,7 @@ def test_packing_algorithm():
     
     # Параметры контейнера
     container_width = 25
-    container_height = 18  # Фиксированная высота
+    container_height = 20  # Фиксированная высота
     
     print("Выполнение упаковки...")
     try:
